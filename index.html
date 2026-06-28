@@ -1,20 +1,25 @@
 <!DOCTYPE html>
 <html lang="zh">
-<head><link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#4caf50">
+<head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>极简记账本</title>
+  <title>理财App Pro</title>
 
-  <!-- 图表库（必须有） -->
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4caf50">
+
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
     body {
       font-family: Arial;
-      background: #f5f5f5;
       margin: 0;
       padding: 15px;
+      max-width: 420px;
+      margin: auto;
+      background: #f5f5f5;
     }
 
     h2 { text-align: center; }
@@ -22,32 +27,29 @@
     .card {
       background: white;
       padding: 15px;
-      margin-bottom: 10px;
-      border-radius: 10px;
+      margin: 10px 0;
+      border-radius: 12px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
 
-    input, select {
+    input, select, button {
       width: 100%;
       padding: 10px;
-      margin-top: 8px;
-      margin-bottom: 10px;
+      margin: 6px 0;
+      border-radius: 8px;
+      border: 1px solid #ddd;
     }
 
     button {
-      width: 100%;
-      padding: 10px;
       background: #4caf50;
       color: white;
       border: none;
-      border-radius: 8px;
-      font-size: 16px;
     }
 
     .item {
       display: flex;
       justify-content: space-between;
-      padding: 8px 0;
+      padding: 6px 0;
       border-bottom: 1px solid #eee;
     }
 
@@ -58,35 +60,49 @@
 
 <body>
 
-<h2>💰 极简记账本</h2>
+<h2>💰 理财App Pro</h2>
 
 <div class="card">
-  <label>类型</label>
   <select id="type">
     <option value="income">收入</option>
     <option value="expense">支出</option>
   </select>
 
-  <label>金额</label>
-  <input id="amount" type="number" placeholder="请输入金额"/>
+  <select id="category">
+    <option>餐饮</option>
+    <option>交通</option>
+    <option>购物</option>
+    <option>住房</option>
+    <option>工资</option>
+    <option>其他</option>
+  </select>
 
-  <label>备注</label>
-  <input id="note" type="text" placeholder="例如：吃饭 / 工资"/>
+  <input id="amount" type="number" placeholder="金额"/>
+  <input id="note" placeholder="备注"/>
 
-  <button onclick="addRecord()">添加记录</button>
+  <button onclick="add()">添加记录</button>
 </div>
 
 <div class="card">
-  <h3>📊 统计</h3>
   <p>收入：<span id="income">0</span></p>
   <p>支出：<span id="expense">0</span></p>
   <p>余额：<span id="balance">0</span></p>
 </div>
 
-<!-- 图表区域 -->
 <div class="card">
-  <h3>📈 月度收支图</h3>
-  <canvas id="myChart"></canvas>
+  <h3>📊 月度趋势</h3>
+  <canvas id="barChart"></canvas>
+</div>
+
+<div class="card">
+  <h3>🍰 支出结构</h3>
+  <canvas id="pieChart"></canvas>
+</div>
+
+<div class="card">
+  <h3>🧠 AI分析</h3>
+  <button onclick="analyze()">生成分析</button>
+  <p id="ai"></p>
 </div>
 
 <div class="card">
@@ -95,23 +111,19 @@
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem("moneyData") || "[]");
+let data = JSON.parse(localStorage.getItem("data") || "[]");
 
-function save() {
-  localStorage.setItem("moneyData", JSON.stringify(data));
+function save(){
+  localStorage.setItem("data", JSON.stringify(data));
 }
 
-function addRecord() {
-  let type = document.getElementById("type").value;
-  let amount = Number(document.getElementById("amount").value);
-  let note = document.getElementById("note").value;
-
-  if (!amount) return alert("请输入金额");
-
+function add(){
   data.push({
-    type,
-    amount,
-    note,
+    id: Date.now(),
+    type: type.value,
+    category: category.value,
+    amount: Number(amount.value),
+    note: note.value,
     time: new Date().toLocaleString()
   });
 
@@ -119,95 +131,109 @@ function addRecord() {
   render();
 }
 
-function getMonthlyData() {
-  let map = {};
+function render(){
+  let income=0, expense=0;
+  list.innerHTML="";
 
-  data.forEach(item => {
-    let date = new Date(item.time);
-    let month = `${date.getFullYear()}-${date.getMonth() + 1}`;
+  data.forEach(i=>{
+    if(i.type==="income") income+=i.amount;
+    else expense+=i.amount;
 
-    if (!map[month]) {
-      map[month] = { income: 0, expense: 0 };
-    }
-
-    if (item.type === "income") {
-      map[month].income += item.amount;
-    } else {
-      map[month].expense += item.amount;
-    }
+    let div=document.createElement("div");
+    div.className="item";
+    div.innerHTML=`<span>${i.category}-${i.note}</span>
+    <span class="${i.type}">
+      ${i.type==="income"?"+":"-"}${i.amount}
+    </span>`;
+    list.appendChild(div);
   });
 
-  return map;
+  incomeEl.innerText=income;
+  expenseEl.innerText=expense;
+  balance.innerText=income-expense;
+
+  renderBar();
+  renderPie();
 }
 
-let chartInstance = null;
+function renderBar(){
+  let map={};
 
-function renderChart() {
-  let monthly = getMonthlyData();
+  data.forEach(i=>{
+    let d=new Date(i.time);
+    let k=`${d.getFullYear()}-${d.getMonth()+1}`;
 
-  let labels = Object.keys(monthly).sort();
-  let incomeData = labels.map(m => monthly[m].income);
-  let expenseData = labels.map(m => monthly[m].expense);
+    if(!map[k]) map[k]={income:0,expense:0};
 
-  const ctx = document.getElementById('myChart');
+    if(i.type==="income") map[k].income+=i.amount;
+    else map[k].expense+=i.amount;
+  });
 
-  if (!ctx) return;
+  let labels=Object.keys(map);
 
-  if (chartInstance) {
-    chartInstance.destroy();
-  }
-
-  chartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: '收入',
-          data: incomeData,
-          backgroundColor: 'green'
-        },
-        {
-          label: '支出',
-          data: expenseData,
-          backgroundColor: 'red'
-        }
+  new Chart(barChart, {
+    type:"bar",
+    data:{
+      labels,
+      datasets:[
+        {label:"收入",data:labels.map(k=>map[k].income),backgroundColor:"green"},
+        {label:"支出",data:labels.map(k=>map[k].expense),backgroundColor:"red"}
       ]
     }
   });
 }
 
-function render() {
-  let income = 0, expense = 0;
-  let list = document.getElementById("list");
-  list.innerHTML = "";
+function renderPie(){
+  let map={};
 
-  data.forEach(item => {
-    if (item.type === "income") income += item.amount;
-    else expense += item.amount;
-
-    let div = document.createElement("div");
-    div.className = "item";
-
-    div.innerHTML = `
-      <span>${item.note}</span>
-      <span class="${item.type}">
-        ${item.type === "income" ? "+" : "-"}${item.amount}
-      </span>
-    `;
-
-    list.appendChild(div);
+  data.forEach(i=>{
+    if(i.type==="expense"){
+      map[i.category]=(map[i.category]||0)+i.amount;
+    }
   });
 
-  document.getElementById("income").innerText = income;
-  document.getElementById("expense").innerText = expense;
-  document.getElementById("balance").innerText = income - expense;
+  new Chart(pieChart,{
+    type:"pie",
+    data:{
+      labels:Object.keys(map),
+      datasets:[{data:Object.values(map)}]
+    }
+  });
+}
 
-  renderChart();
+function analyze(){
+  let income=0,expense=0,map={};
+
+  data.forEach(i=>{
+    if(i.type==="income") income+=i.amount;
+    else {
+      expense+=i.amount;
+      map[i.category]=(map[i.category]||0)+i.amount;
+    }
+  });
+
+  let top=Object.entries(map).sort((a,b)=>b[1]-a[1])[0];
+  let rate=income?((income-expense)/income*100).toFixed(1):0;
+
+  ai.innerHTML=`
+  💰 收入:${income}<br>
+  💸 支出:${expense}<br>
+  📊 储蓄率:${rate}%<br>
+  🔥 最大支出:${top?top[0]:"无"}<br>
+  ${rate<0?"⚠️ 超支警告":"✅ 财务健康"}
+  `;
 }
 
 render();
+
+// PWA注册
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
 </script>
+
+<canvas id="barChart"></canvas>
+<canvas id="pieChart"></canvas>
 
 </body>
 </html>
