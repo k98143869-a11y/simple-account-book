@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>极简记账本</title>
+
+  <!-- 图表库（必须有） -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     body {
       font-family: Arial;
@@ -11,6 +15,7 @@
       margin: 0;
       padding: 15px;
     }
+
     h2 { text-align: center; }
 
     .card {
@@ -77,6 +82,12 @@
   <p>余额：<span id="balance">0</span></p>
 </div>
 
+<!-- 图表区域 -->
+<div class="card">
+  <h3>📈 月度收支图</h3>
+  <canvas id="myChart"></canvas>
+</div>
+
 <div class="card">
   <h3>📒 记录</h3>
   <div id="list"></div>
@@ -107,12 +118,70 @@ function addRecord() {
   render();
 }
 
+function getMonthlyData() {
+  let map = {};
+
+  data.forEach(item => {
+    let date = new Date(item.time);
+    let month = `${date.getFullYear()}-${date.getMonth() + 1}`;
+
+    if (!map[month]) {
+      map[month] = { income: 0, expense: 0 };
+    }
+
+    if (item.type === "income") {
+      map[month].income += item.amount;
+    } else {
+      map[month].expense += item.amount;
+    }
+  });
+
+  return map;
+}
+
+let chartInstance = null;
+
+function renderChart() {
+  let monthly = getMonthlyData();
+
+  let labels = Object.keys(monthly).sort();
+  let incomeData = labels.map(m => monthly[m].income);
+  let expenseData = labels.map(m => monthly[m].expense);
+
+  const ctx = document.getElementById('myChart');
+
+  if (!ctx) return;
+
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: '收入',
+          data: incomeData,
+          backgroundColor: 'green'
+        },
+        {
+          label: '支出',
+          data: expenseData,
+          backgroundColor: 'red'
+        }
+      ]
+    }
+  });
+}
+
 function render() {
   let income = 0, expense = 0;
   let list = document.getElementById("list");
   list.innerHTML = "";
 
-  data.forEach((item, index) => {
+  data.forEach(item => {
     if (item.type === "income") income += item.amount;
     else expense += item.amount;
 
@@ -132,6 +201,8 @@ function render() {
   document.getElementById("income").innerText = income;
   document.getElementById("expense").innerText = expense;
   document.getElementById("balance").innerText = income - expense;
+
+  renderChart();
 }
 
 render();
